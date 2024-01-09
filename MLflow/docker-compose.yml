@@ -1,0 +1,45 @@
+version: '3.7'
+services:
+  tracking-server:
+    container_name: mlflow-tracking
+    build:
+      context: ./tracking-server
+      dockerfile: Dockerfile
+    expose:
+      - 80
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Tokyo
+      # jwilder/nginx-proxy用の設定.localで実行するときは'localhost'
+      VIRTUAL_HOST: "localhost"
+    command: >
+      mlflow server --backend-store-uri 'sqlite:///./sqlite/data/my.db'
+      --host 0.0.0.0 --port 80
+    volumes:
+      - ./tracking-server/sqlite/data:/mlflow/sqlite/data
+      - ./tracking-server/mlartifacts:/mlflow/mlartifacts
+    networks:
+      - mlflow-net
+
+  nginx-proxy:
+    image: jwilder/nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "5000:80"
+    volumes:
+      # basic認証 
+      # - ./nginx/htpasswd:/etc/nginx/htpasswd
+
+      # デフォルトではnginx-proxyを介したファイルの転送には容量制限があるので，これを設定で増量
+      - ./nginx/conf.d/proxy.conf:/etc/nginx/conf.d/proxy.conf
+
+
+      # コンテナの起動・停止イベントを受け取る必要がある為、 docker.sock をマウントする必要がある
+      # (コンテナが追加で起動された際などに，トラフィックをルーティング等を自動的に更新する必要がある)
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    networks:
+      - mlflow-net
+
+networks:
+  mlflow-net:
+    driver: bridge
